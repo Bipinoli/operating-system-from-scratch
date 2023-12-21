@@ -46,6 +46,8 @@ struct ScreenChar {
 
 const VGA_BUFFER_COLS: usize = 80;
 const VGA_BUFFER_ROWS: usize = 25;
+const H_PADDING: usize = 1;
+const V_PADDING: usize = 1;
 
 
 #[repr(transparent)]
@@ -55,44 +57,67 @@ struct VGA_Buffer {
 
 
 pub struct Writer {
-    current_col: usize,
+    cur_col: usize,
+    cur_row: usize,
+    has_overflowen: bool,
     current_color_code: ColorCode,
     buffer: &'static mut VGA_Buffer,
 }
 
 
 impl Writer {
+    pub fn new() -> Writer {
+        Writer {
+            cur_col: H_PADDING,
+            cur_row: V_PADDING,
+            has_overflowen: false,
+            current_color_code: ColorCode::new(Color::Yellow, Color::Black),
+            buffer: unsafe { &mut *(0xb8000 as *mut VGA_Buffer) }
+        }
+    }
+
+    /// write top to bottom
+    /// when the data overflows the buffer
+    /// just shift them above to have new emply line below
+    /// the characters at the top will be clipped
     pub fn write_byte(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
             byte => {
-                if self.current_col >= VGA_BUFFER_COLS {
+                if self.cur_col + H_PADDING >= VGA_BUFFER_COLS {
                     self.new_line();
                 }
 
-                let row = VGA_BUFFER_ROWS - 1;
-                let col = self.current_col;
-
-                let color_code = self.current_color_code;
-                self.buffer.chars[row][col].write(ScreenChar {
+                self.buffer.chars[self.cur_row][self.cur_col].write(ScreenChar {
                     ascii: byte,
-                    color_code,
+                    color_code: self.current_color_code,
                 });
-                self.current_col += 1;
+
+                self.cur_col += 1;
             }
         }
     }
+
 
     fn new_line(&mut self) {
-        for row in 1..VGA_BUFFER_ROWS {
-            for col in 0..VGA_BUFFER_COLS {
-                let character = self.buffer.chars[row][col].read();
-                self.buffer.chars[row - 1][col].write(character);
-            }
+        self.cur_row += 1;
+        self.cur_col = H_PADDING;
+
+        if self.cur_row + V_PADDING >= VGA_BUFFER_ROWS {
+            self.has_overflowen = true;
+            self.cur_row = VGA_BUFFER_ROWS - 1 - V_PADDING; // last line
         }
-        self.clear_row(VGA_BUFFER_ROWS - 1);
-        self.current_col = 0;
+
+        if self.has_overflowen {
+            for row in (V_PADDING+1)..(VGA_BUFFER_ROWS - V_PADDING) {
+                for col in 0..VGA_BUFFER_COLS {
+                    self.buffer.chars[row-1][col].write(self.buffer.chars[row][col].read());
+                }
+            }
+            self.clear_row(self.cur_row);
+        }
     }
+
 
     fn clear_row(&mut self, row: usize) {
         let blank = ScreenChar {
@@ -118,18 +143,9 @@ impl Writer {
     }
 }
 
-pub fn print_something() {
-    use core::fmt::Write;
-    let mut writer = Writer {
-        current_col: 0,
-        current_color_code: ColorCode::new(Color::Yellow, Color::Black),
-        buffer: unsafe { &mut *(0xb8000 as *mut VGA_Buffer) },
-    };
 
-    writer.write_byte(b'H');
-    writer.write_string("ello! ");
-    write!(writer, "The numbers are {} and {}", 42, 1.0/3.0).unwrap();
-}
+
+
 
 
 impl fmt::Write for Writer {
@@ -141,12 +157,10 @@ impl fmt::Write for Writer {
 
 
 lazy_static! {
-    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
-        current_col: 0,
-        current_color_code: ColorCode::new(Color::Yellow, Color::Black),
-        buffer: unsafe { &mut *(0xb8000 as *mut VGA_Buffer) },
-    });
+    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer::new());
 }
+
+
 
 
 
