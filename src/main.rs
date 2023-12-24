@@ -11,6 +11,11 @@ use operating_system_from_scratch::println;
 pub extern "C" fn _start() -> ! {
     println!("Hello World{}", "!");
 
+    operating_system_from_scratch::init();
+
+    // invoke a breakpoint exception
+    x86_64::instructions::interrupts::int3();
+
     #[cfg(test)]
     test_main();
 
