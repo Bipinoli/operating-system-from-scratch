@@ -51,7 +51,7 @@ const V_PADDING: usize = 1;
 
 
 #[repr(transparent)]
-struct VGA_Buffer {
+struct VgaBuffer {
     chars: [[Volatile<ScreenChar>; VGA_BUFFER_COLS]; VGA_BUFFER_ROWS]
 }
 
@@ -61,7 +61,7 @@ pub struct Writer {
     cur_row: usize,
     has_overflowen: bool,
     current_color_code: ColorCode,
-    buffer: &'static mut VGA_Buffer,
+    buffer: &'static mut VgaBuffer,
 }
 
 
@@ -72,7 +72,7 @@ impl Writer {
             cur_row: V_PADDING,
             has_overflowen: false,
             current_color_code: ColorCode::new(Color::Yellow, Color::Black),
-            buffer: unsafe { &mut *(0xb8000 as *mut VGA_Buffer) }
+            buffer: unsafe { &mut *(0xb8000 as *mut VgaBuffer) }
         }
     }
 
